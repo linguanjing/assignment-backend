@@ -12,8 +12,10 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toList;
 
 @Slf4j
 @Service
@@ -58,54 +60,6 @@ public class ClientTransactionService {
         return returnList;
     }
 
-
-    public List<String> generateTransactionMessage(ClientTransaction clientTransaction) {
-
-        List<String> messageList = new ArrayList<>();
-
-        // assume all the fields are not null
-        Client sender = clientTransaction.getSender();
-        Client receiver = clientTransaction.getReceiver();
-
-        double transferAmount = clientTransaction.getAmount();
-
-        if (sender != null && receiver != null) {
-
-            getBalanceSummary(sender.getLoginId());
-
-            // top up
-            if (sender.equals(receiver)) {
-                // e.g. Top up 50.
-                messageList.add(messageSource.getMessage("transaction.topup", new Object[]{transferAmount}, Locale.ENGLISH));
-            }
-            // transfer
-            else {
-                // e.g. Transferred 50 to Alice.
-                messageList.add(messageSource.getMessage("transaction.transfer", new Object[]{transferAmount, receiver.getDisplayName()}, Locale.ENGLISH));
-
-                double senderBalance = clientTransaction.getSenderBalance();
-                double difference = 0;
-
-                // sender has no balance
-                if (senderBalance < 0) {
-                    difference = 0 - transferAmount;
-                }
-                // otherwise, it means the sender has balance
-                else {
-                    difference = senderBalance - transferAmount;
-                }
-
-                // e.g. Owing 40 to Bob.
-                if (difference < 0) {
-                    messageList.add(messageSource.getMessage("transaction.owing.to", new Object[]{Math.abs(difference), receiver.getDisplayName()}, Locale.ENGLISH));
-                }
-            }
-        }
-
-        return messageList;
-    }
-
-
     /**
      * get the latest balance of the client
      * @param clientId
@@ -116,20 +70,9 @@ public class ClientTransactionService {
         double balance = 0;
 
         // find sender balance
-        List<ClientTransaction> clientTransactionList = repository.findTransationByClientId(clientId);
+        List<ClientTransaction> clientTransactionList = getTransactionListByClientId(clientId);
 
         if (!CollectionUtils.isEmpty(clientTransactionList)) {
-//            // add amount if the login user is the receiver
-//            balance = balance + clientTransactionList.stream()
-//                    .filter(t -> t.getReceiverId().equals(loginClientId))
-//                    .mapToDouble(ClientTransaction::getAmount).sum();
-//
-//            // deduct amount if the login user is the sender and not the receiver
-//            balance = balance - clientTransactionList
-//                    .stream()
-//                    .filter(t -> (t.getSenderId().equals(loginClientId) && !t.getReceiverId().equals(t.getSenderId())))
-//                    .mapToDouble(ClientTransaction::getAmount)
-//                    .sum();
 
             ClientTransaction transaction = clientTransactionList.iterator().next();
 
@@ -144,34 +87,90 @@ public class ClientTransactionService {
         return balance;
     }
 
-    public ClientTransaction getLatestTransactionBySenderAndReceiver(String senderId, String receiverId, List<ClientTransaction> clientTransactionList){
 
-        if (!CollectionUtils.isEmpty(clientTransactionList)){
+    public List<String> generateTransactionMessage(String loginClientId) {
 
-            Optional<ClientTransaction> result = clientTransactionList
-                                                .stream()
-                                                .filter(t -> (t.getSenderId().equals(senderId) && t.getReceiverId().equals(receiverId)))
-                                                .findFirst();
+        List<String> messageList = new ArrayList<>();
 
-            if (result.isPresent()){
-                return result.get();
+        // find all transaction of the sender
+        List<ClientTransaction> clientTransactionList = getTransactionListByClientId(loginClientId);
+
+        if (!CollectionUtils.isEmpty(clientTransactionList)) {
+
+            //top up message
+            ClientTransaction clientTransaction = clientTransactionList.get(0);
+
+            // always add the topup message if this is the last transaction
+            if (clientTransaction.getSenderId().equals(clientTransaction.getReceiverId())){
+                // e.g. Top up 50.
+                messageList.add(messageSource.getMessage("transaction.topup", new Object[]{clientTransaction.getAmount()}, Locale.ENGLISH));
+            }
+
+            // search for own to
+            List<Client> receiverList = repository.findReceiverClientId(loginClientId);
+
+            for (Client receiver : receiverList){
+
+                double balance = searchOwnToAmount (loginClientId, receiver.getLoginId(), clientTransactionList);
+
+                log.debug("{} own to {} = {}", loginClientId, receiver.getLoginId(), balance);
+
+                if (balance > 0){
+                    messageList.add(messageSource.getMessage("transaction.owing.to", new Object[]{Math.abs(balance),
+                            receiver.getDisplayName()}, Locale.ENGLISH));
+                }
+
+            }
+
+            // search for own from
+            List<Client> senderList = repository.findSendClientId(loginClientId);
+            senderList.removeAll(receiverList);
+
+            for (Client sender : senderList){
+
+                double balance = searchOwnToAmount (sender.getLoginId(), loginClientId, clientTransactionList);
+
+                log.debug("{} own from {} = {}", loginClientId, sender.getLoginId(), balance);
+
+                if (balance > 0){
+                    messageList.add(messageSource.getMessage("transaction.owing.from", new Object[]{Math.abs(balance),
+                            sender.getDisplayName()}, Locale.ENGLISH));
+                }
+
             }
         }
-        return null;
+        return messageList;
     }
 
+    private double searchOwnToAmount(String senderId, String receiverId, List<ClientTransaction> clientTransactionList){
 
-    public void getBalanceSummary(String loginClientId) {
+        double amount = 0;
 
-        // test
-        List<String> testList = repository.findBalanceClientId(loginClientId);
+        if (!CollectionUtils.isEmpty(clientTransactionList)) {
+            List<ClientTransaction> shortList = clientTransactionList
+                                                .stream()
+                                                .filter(t -> (t.getSenderId().equals(senderId) && t.getReceiverId().equals(receiverId)))
+                                                .collect(Collectors.toList());
 
-        for (String rid : testList){
+            for (ClientTransaction transaction : shortList){
 
-
-
+                // Scenario  1, in this transaction sender has no balance
+                if (transaction.getSenderBalance() < 0){
+                    amount += transaction.getAmount();
+                }
+                // Scenario  2, in this transaction sender out of balance
+                else if (transaction.getAmount() > transaction.getSenderBalance()){
+                    amount += transaction.getAmount() - transaction.getSenderBalance();
+                }
+                // Scenario  3, sender has enough balance
+                else{
+                    break;
+                }
+            }
         }
 
+
+        return amount;
     }
 
 }

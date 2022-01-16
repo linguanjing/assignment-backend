@@ -1,8 +1,6 @@
 package com.sky.assignment.controller;
 
-import com.sky.assignment.datamodel.BalanceJsonResponse;
 import com.sky.assignment.datamodel.Client;
-import com.sky.assignment.service.BalanceJsonService;
 import com.sky.assignment.service.ClientService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,9 +22,6 @@ import java.util.Optional;
 @RestController
 @RequestMapping("api/v1/client")
 public class ClientController {
-
-    @Autowired
-    private BalanceJsonService balanceJsonService;
 
     @Autowired
     private ClientService clientService;
@@ -61,14 +56,10 @@ public class ClientController {
                 if (log.isDebugEnabled()){
                     log.debug("Login Success");
                 }
-                BalanceJsonResponse balanceJsonResponse = balanceJsonService.intiBalanceJsonResponseByClient(loginClient.get().getLoginId(), true);
 
-                balanceJsonResponse.appendMessage(messageSource.getMessage("login.success", new Object[]{loginClient.get().getDisplayName()},  Locale.ENGLISH), 0);
-
-                return ResponseEntity.ok(balanceJsonResponse);
+                return ResponseEntity.ok(loginClient.get());
             }
         }
-
 
         return ResponseEntity.ok(messageSource.getMessage("login.invalidUser", null,  Locale.ENGLISH));
     }

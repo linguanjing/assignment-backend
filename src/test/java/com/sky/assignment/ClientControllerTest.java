@@ -1,10 +1,7 @@
 package com.sky.assignment;
 
-import com.sky.assignment.datamodel.BalanceJsonResponse;
 import com.sky.assignment.datamodel.Client;
-import com.sky.assignment.datamodel.ClientTransaction;
 import com.sky.assignment.service.ClientService;
-import com.sky.assignment.service.ClientTransactionService;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,8 +28,6 @@ public class ClientControllerTest {
     @Autowired
     private ClientService clientService;
 
-    @Autowired
-    private ClientTransactionService clientTransactionService;
 
     private static final String BASE_URL = "/api/v1/client";
 
@@ -44,29 +39,6 @@ public class ClientControllerTest {
         Client bob = new Client("bob","password", "Bob");
         clientService.createNewClient(bob);
 
-        // Alice tot op up 100
-        ClientTransaction transaction = new ClientTransaction(alice.getLoginId(), alice.getLoginId(), 100);
-        transaction.setSenderBalance(0);
-        transaction.setReceiverBalance(0);
-        clientTransactionService.insertTransaction(transaction);
-
-        // Bob tot op up 80
-        ClientTransaction transaction1 = new ClientTransaction(bob.getLoginId(), bob.getLoginId(), 80);
-        transaction1.setSenderBalance(0);
-        transaction1.setReceiverBalance(0);
-        clientTransactionService.insertTransaction(transaction1);
-
-        // Bob pay Alice 50
-        ClientTransaction transaction2 = new ClientTransaction(bob.getLoginId(), alice.getLoginId(), 50);
-        transaction2.setSenderBalance(80);
-        transaction2.setReceiverBalance(100);
-        clientTransactionService.insertTransaction(transaction2);
-
-        // Bob pay Alice 100
-        ClientTransaction transaction3 = new ClientTransaction(bob.getLoginId(), alice.getLoginId(), 100);
-        transaction3.setSenderBalance(30);
-        transaction3.setReceiverBalance(150);
-        clientTransactionService.insertTransaction(transaction3);
     }
 
 
@@ -95,10 +67,9 @@ public class ClientControllerTest {
 
         HttpEntity<Client> request = new HttpEntity<>(alice, headers);
 
-        ResponseEntity<BalanceJsonResponse> response = template.postForEntity(new StringBuffer(BASE_URL).append("/login").toString(), request, BalanceJsonResponse.class);
+        ResponseEntity<Client> response = template.postForEntity(new StringBuffer(BASE_URL).append("/login").toString(), request, Client.class);
 
-        assertThat( response.getBody().getLoginUserId()).isEqualTo(alice.getLoginId());
-        assertThat( response.getBody().getTransactionMessageList().get(1)).isEqualTo("Your balance is 250.");
+        assertThat( response.getBody().getLoginId()).isEqualTo(alice.getLoginId());
     }
 
 
