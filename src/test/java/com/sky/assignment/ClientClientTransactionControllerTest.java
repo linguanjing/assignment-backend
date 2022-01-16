@@ -91,26 +91,6 @@ public class ClientClientTransactionControllerTest {
     }
 
     @Test
-    public void newTransaction() {
-        Client alice = clientService.getClientByLoginId("alice").get();
-        Client bob = clientService.getClientByLoginId("bob").get();
-
-        // Alice pay Bob 120
-        ClientTransaction transaction = new ClientTransaction(alice.getLoginId(), bob.getLoginId(), 120);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-COM-PERSIST", "true");
-
-        HttpEntity<ClientTransaction> request = new HttpEntity<>(transaction, headers);
-
-        ResponseEntity<BalanceJsonResponse> response = template.postForEntity(new StringBuffer(BASE_URL).append("/new").toString(), request, BalanceJsonResponse.class);
-
-        assertThat( response.getBody().getLoginUserId()).isEqualTo(alice.getLoginId());
-        assertThat( response.getBody().getTransactionMessageList().get(1)).isEqualTo("Owing 20 to Bob.");
-    }
-
-
-    @Test
     public void newTransactionComplex() {
         Client alice = clientService.getClientByLoginId("alice").get();
         Client bob = clientService.getClientByLoginId("bob").get();
