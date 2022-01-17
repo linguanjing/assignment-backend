@@ -106,47 +106,62 @@ public class ClientTransactionService {
                 messageList.add(messageSource.getMessage("transaction.topup", new Object[]{clientTransaction.getAmount()}, Locale.ENGLISH));
             }
 
-            // search for own to
-            List<Client> receiverList = repository.findReceiverClientId(loginClientId);
+            // search for own to/from
+            List<Client> otherPartyList = repository.findReceiverClientId(loginClientId);
+            otherPartyList.addAll(repository.findSendClientId(loginClientId));
 
-            for (Client receiver : receiverList){
+            List<Client> listWithoutDuplicates = new ArrayList<>(new HashSet<>(otherPartyList));
 
-                double balance = searchOwnToAmount (loginClientId, receiver.getLoginId(), clientTransactionList);
 
-                log.debug("{} own to {} = {}", loginClientId, receiver.getLoginId(), balance);
+            for (Client otherParty : listWithoutDuplicates){
+
+                // find the transaction between login user & the another party
+                List<ClientTransaction> shortList = clientTransactionList
+                        .stream()
+                        .filter(t -> ((t.getSenderId().equals(loginClientId) && t.getReceiverId().equals(otherParty.getLoginId()))
+                                || (t.getSenderId().equals(otherParty.getLoginId()) && t.getReceiverId().equals(loginClientId))))
+                        .collect(Collectors.toList());
+
+                ClientTransaction lastTransaction = shortList.get(0);
+
+                double balance = 0;
+
+                // if last transaction sender has out of balance
+                if (lastTransaction.getAmount() > lastTransaction.getSenderBalance() ){
+                    // search own to
+                    if (lastTransaction.getSenderId().equals(loginClientId)){
+                        balance = searchOwningAmount (loginClientId, otherParty.getLoginId(), clientTransactionList);
+                    }
+                    // else search for own from
+                    else{
+                        balance = - searchOwningAmount (otherParty.getLoginId(), loginClientId, clientTransactionList);
+                    }
+
+                }
+
+                log.debug("{} own to {} = {}", loginClientId, otherParty.getLoginId(), balance);
 
                 if (balance > 0){
                     messageList.add(messageSource.getMessage("transaction.owing.to", new Object[]{Math.abs(balance),
-                            receiver.getDisplayName()}, Locale.ENGLISH));
+                            otherParty.getDisplayName()}, Locale.ENGLISH));
                 }
-
-            }
-
-            // search for own from
-            List<Client> senderList = repository.findSendClientId(loginClientId);
-            senderList.removeAll(receiverList);
-
-            for (Client sender : senderList){
-
-                double balance = searchOwnToAmount (sender.getLoginId(), loginClientId, clientTransactionList);
-
-                log.debug("{} own from {} = {}", loginClientId, sender.getLoginId(), balance);
-
-                if (balance > 0){
+                else if (balance < 0){
                     messageList.add(messageSource.getMessage("transaction.owing.from", new Object[]{Math.abs(balance),
-                            sender.getDisplayName()}, Locale.ENGLISH));
+                            otherParty.getDisplayName()}, Locale.ENGLISH));
                 }
 
             }
+
         }
         return messageList;
     }
 
-    private double searchOwnToAmount(String senderId, String receiverId, List<ClientTransaction> clientTransactionList){
+    private double searchOwningAmount(String senderId, String receiverId, List<ClientTransaction> clientTransactionList){
 
         double amount = 0;
 
         if (!CollectionUtils.isEmpty(clientTransactionList)) {
+
             List<ClientTransaction> shortList = clientTransactionList
                                                 .stream()
                                                 .filter(t -> (t.getSenderId().equals(senderId) && t.getReceiverId().equals(receiverId)))

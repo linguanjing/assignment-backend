@@ -71,8 +71,9 @@ public class ClientClientTransactionControllerTest {
     }
 
     /**
+     * before Alice = 100, bob = 80
      * Alice pay Bob 120
-     * expected Alice - 20 & Bob = 200
+     * after Alice - 20 & Bob = 200
      */
     @Test
     public void newTransaction1() {
@@ -108,15 +109,16 @@ public class ClientClientTransactionControllerTest {
 
 
     /**
+     * before Alice = -20, bob = 200
      * Bob pay Alice 250
-     * Expected Alice 230 & Bob = 0
+     * after Alice 230 & Bob = -50
      */
     @Test
     public void newTransaction2() {
         Client alice = clientService.getClientByLoginId("alice").get();
         Client bob = clientService.getClientByLoginId("bob").get();
 
-        // Alice pay Bob 120
+        // Bob pay Alice 250
         TransferJsonRequest transferJsonRequest = new TransferJsonRequest(bob.getLoginId(),alice.getLoginId(),  250);
 
         HttpHeaders headers = new HttpHeaders();
@@ -128,15 +130,95 @@ public class ClientClientTransactionControllerTest {
 
         assertThat(response.getBody().getSenderId()).isEqualTo(bob.getLoginId());
 
-        // expected Alice - 20 & Bob = 200
+
         ResponseEntity<List> senderMessage =
                 template.getForEntity(new StringBuffer(BASE_URL).append("/").append(bob.getLoginId()).toString(), List.class);
 
         assertThat(senderMessage.getBody().get(1)).isEqualTo("Your balance is 0.");
+        assertThat(senderMessage.getBody().get(2)).isEqualTo("Owing 50 to Alice.");
 
         ResponseEntity<List> receiverMessage =
                 template.getForEntity(new StringBuffer(BASE_URL).append("/").append(alice.getLoginId()).toString(), List.class);
 
         assertThat(receiverMessage.getBody().get(1)).isEqualTo("Your balance is 230.");
+        assertThat(receiverMessage.getBody().get(2)).isEqualTo("Owing 50 from Bob.");
+    }
+
+
+    /**
+     * before Alice 230 & Bob = -50
+     * Alice pay Bob 60
+     * after Alice 170 & Bob = 10
+     * no owning message
+     */
+    @Test
+    public void newTransaction3() {
+        Client sender = clientService.getClientByLoginId("alice").get();
+        Client receiver = clientService.getClientByLoginId("bob").get();
+
+        // Alice pay Bob 60
+        TransferJsonRequest transferJsonRequest = new TransferJsonRequest(sender.getLoginId(), receiver.getLoginId(),  60);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-COM-PERSIST", "true");
+
+        HttpEntity<TransferJsonRequest> request = new HttpEntity<>(transferJsonRequest, headers);
+
+        ResponseEntity<TransferJsonRequest> response = template.postForEntity(new StringBuffer(BASE_URL).append("/new").toString(), request, TransferJsonRequest.class);
+
+        assertThat(response.getBody().getSenderId()).isEqualTo(sender.getLoginId());
+
+
+        ResponseEntity<List> senderMessage =
+                template.getForEntity(new StringBuffer(BASE_URL).append("/").append(sender.getLoginId()).toString(), List.class);
+
+        assertThat(senderMessage.getBody().size()).isEqualTo(2);
+        assertThat(senderMessage.getBody().get(1)).isEqualTo("Your balance is 170.");
+
+        ResponseEntity<List> receiverMessage =
+                template.getForEntity(new StringBuffer(BASE_URL).append("/").append(receiver.getLoginId()).toString(), List.class);
+
+        assertThat(receiverMessage.getBody().size()).isEqualTo(2);
+        assertThat(receiverMessage.getBody().get(1)).isEqualTo("Your balance is 10.");
+    }
+
+
+    /**
+     * before Alice 170 & Bob = 10 & Sky = 50
+     * Bob pay Sky 60
+     * after Alice 170 & Bob = -50 & Sky = 110
+     * no owning message
+     */
+    @Test
+    public void newTransaction4() {
+        Client sender = clientService.getClientByLoginId("bob").get();
+        Client receiver = clientService.getClientByLoginId("sky").get();
+
+        // Alice pay Bob 60
+        TransferJsonRequest transferJsonRequest = new TransferJsonRequest(sender.getLoginId(), receiver.getLoginId(),  60);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-COM-PERSIST", "true");
+
+        HttpEntity<TransferJsonRequest> request = new HttpEntity<>(transferJsonRequest, headers);
+
+        ResponseEntity<TransferJsonRequest> response = template.postForEntity(new StringBuffer(BASE_URL).append("/new").toString(), request, TransferJsonRequest.class);
+
+        assertThat(response.getBody().getSenderId()).isEqualTo(sender.getLoginId());
+
+
+        ResponseEntity<List> senderMessage =
+                template.getForEntity(new StringBuffer(BASE_URL).append("/").append(sender.getLoginId()).toString(), List.class);
+
+        assertThat(senderMessage.getBody().size()).isEqualTo(3);
+        assertThat(senderMessage.getBody().get(1)).isEqualTo("Your balance is 0.");
+        assertThat(senderMessage.getBody().get(2)).isEqualTo("Owing 50 to Sky.");
+
+        ResponseEntity<List> receiverMessage =
+                template.getForEntity(new StringBuffer(BASE_URL).append("/").append(receiver.getLoginId()).toString(), List.class);
+
+        assertThat(receiverMessage.getBody().size()).isEqualTo(3);
+        assertThat(receiverMessage.getBody().get(1)).isEqualTo("Your balance is 110.");
+        assertThat(receiverMessage.getBody().get(2)).isEqualTo("Owing 50 from Bob.");
     }
 }
