@@ -13,7 +13,7 @@ react-frontend (client) - REST API Consumer
 
 ### Run 
 
-    project_folder/mvnw sprint-boot:run
+    project_folder/mvnw spring-boot:run
 
 ### API:
 #### Client Login
